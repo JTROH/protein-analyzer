@@ -76,6 +76,21 @@
   @media (max-width:480px){
     h1{font-size:1.3rem}.metric .v{font-size:1.2rem}
   }
+  /* print-only report (used for Save as PDF) */
+  #printReport{display:none}
+  @media print{
+    @page{margin:16mm}
+    body{background:#fff;color:#000}
+    .wrap{display:none !important}
+    #printReport{display:block !important;color:#000;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    #printReport h1{font-size:18px;margin:0 0 2px}
+    #printReport .muted{color:#444;font-size:11px;margin:1px 0}
+    #printReport h2{font-size:13px;margin:16px 0 4px;border-bottom:1px solid #000;padding-bottom:3px}
+    #printReport table{width:100%;border-collapse:collapse;margin-top:6px;font-size:11px}
+    #printReport th,#printReport td{border:1px solid #999;padding:4px 7px;text-align:left}
+    #printReport th.num,#printReport td.num{text-align:right;font-variant-numeric:tabular-nums}
+    #printReport pre{font-size:10px;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,Menlo,Consolas,monospace;margin:4px 0 0}
+  }
 </style>
 </head>
 <body>
@@ -132,8 +147,8 @@ or just paste the residues, line breaks and numbers are fine"></textarea>
 
     <div class="card">
       <div class="row" style="margin-top:0">
-        <button class="btn-ghost" id="copyBtn">Copy report</button>
-        <span class="seq-meta" id="copyMsg"></span>
+        <button class="btn-primary" id="saveBtn">Save report (PDF)</button>
+        <span class="seq-meta" id="saveMsg"></span>
       </div>
     </div>
   </div>
@@ -143,6 +158,9 @@ or just paste the residues, line breaks and numbers are fine"></textarea>
     No data leaves your device.
   </footer>
 </div>
+
+<!-- Hidden on screen; rendered only when printing / saving as PDF -->
+<div id="printReport" aria-hidden="true"></div>
 
 <script>
 /* ============================================================
@@ -347,27 +365,51 @@ function analyze(){
   $("results").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
-function buildReport(){
-  const r=CURRENT, a=r.analysis;
-  const comp=STD.split("").map(aa=>`  ${aa} ${NAMES[aa].padEnd(13)} ${String(a.counts[aa]).padStart(4)}  ${fmt(a.counts[aa]/a.length*100)}%`).join("\n");
-  return `Protein Sequence Analysis — ${r.id}
-${r.desc}
-========================================
-Number of residues : ${a.length}
-Molecular weight   : ${fmt(a.mw)} Da (${fmt(a.mwKDa,2)} kDa)
-Theoretical pI     : ${fmt(a.pI)}
-Instability index  : ${fmt(a.instability)} (${a.stable?"stable":"unstable"})
-Aliphatic index    : ${fmt(a.aliphatic)}
-GRAVY              : ${fmt(a.gravy,3)}
-Net charge at pH 7 : ${(a.charge7>=0?"+":"")+fmt(a.charge7)}
-Negative (D+E)     : ${a.neg}
-Positive (R+K)     : ${a.pos}
-Ext. coeff (red.)  : ${fmt(a.ext.reduced,0)} M-1 cm-1
-Ext. coeff (cyst.) : ${fmt(a.ext.cystine,0)} M-1 cm-1
+function esc(s){return String(s).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));}
 
-Amino acid composition:
-${comp}
-`;
+function buildPrintReport(){
+  const r=CURRENT, a=r.analysis;
+  const props=[
+    ["Number of residues", a.length],
+    ["Molecular weight", `${fmt(a.mw)} Da (${fmt(a.mwKDa,2)} kDa)`],
+    ["Theoretical pI", fmt(a.pI)],
+    ["Instability index", `${fmt(a.instability)} (${a.stable?"stable":"unstable"})`],
+    ["Aliphatic index", fmt(a.aliphatic)],
+    ["GRAVY (hydropathy)", fmt(a.gravy,3)],
+    ["Net charge at pH 7", (a.charge7>=0?"+":"")+fmt(a.charge7)],
+    ["Negatively charged (Asp+Glu)", a.neg],
+    ["Positively charged (Arg+Lys)", a.pos],
+    ["Ext. coefficient (reduced)", `${fmt(a.ext.reduced,0)} M⁻¹cm⁻¹`],
+    ["Ext. coefficient (cystines)", `${fmt(a.ext.cystine,0)} M⁻¹cm⁻¹`],
+  ].map(([k,v])=>`<tr><td>${k}</td><td class="num">${v}</td></tr>`).join("");
+  const comp=STD.split("").map(aa=>({aa,n:a.counts[aa],pct:a.counts[aa]/a.length*100}))
+    .sort((x,y)=>y.n-x.n)
+    .map(x=>`<tr><td>${x.aa} &middot; ${NAMES[x.aa]}</td><td class="num">${x.n}</td><td class="num">${fmt(x.pct)}%</td></tr>`).join("");
+  const seqBlock=esc(r.seq).replace(/(.{60})/g,"$1\n");
+  let note=`Generated ${new Date().toLocaleString()} &middot; jtroh.github.io/protein-analyzer &middot; ProtParam-compatible`;
+  if(r.nonStd.length)note+=` &middot; ${r.nonStd.length} non-standard residue(s) ignored`;
+  $("printReport").innerHTML=`
+    <h1>Protein Sequence Analysis</h1>
+    <div class="muted"><strong>${esc(r.id)}</strong> — ${esc(r.desc)}</div>
+    <div class="muted">${note}</div>
+    <h2>Physicochemical properties</h2>
+    <table><tbody>${props}</tbody></table>
+    <h2>Amino acid composition</h2>
+    <table><thead><tr><th>Residue</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>${comp}</tbody></table>
+    <h2>Sequence (${a.length} aa)</h2>
+    <pre>${seqBlock}</pre>`;
+}
+
+function saveReportPDF(){
+  if(!CURRENT)return;
+  buildPrintReport();
+  const prevTitle=document.title;
+  // The print dialog's default "Save as PDF" filename comes from document.title
+  document.title=("Protein_report_"+(CURRENT.id||"sequence")).replace(/[^A-Za-z0-9_.-]+/g,"_");
+  const restore=()=>{document.title=prevTitle;$("saveMsg").textContent="";window.removeEventListener("afterprint",restore);};
+  window.addEventListener("afterprint",restore);
+  $("saveMsg").textContent="Choose “Save as PDF” as the destination.";
+  window.print();
 }
 
 /* events */
@@ -376,11 +418,7 @@ $("example").addEventListener("click",()=>{$("seqin").value=EXAMPLE;analyze();})
 $("clear").addEventListener("click",()=>{$("seqin").value="";$("results").classList.add("hidden");$("parsewarn").classList.add("hidden");$("seqin").focus();});
 $("recordSelect").addEventListener("change",e=>showRecord(+e.target.value));
 $("phSlider").addEventListener("input",e=>updateCharge(+e.target.value));
-$("copyBtn").addEventListener("click",async()=>{
-  try{await navigator.clipboard.writeText(buildReport());$("copyMsg").textContent="Copied!";}
-  catch{$("copyMsg").textContent="Copy failed — select and copy manually.";}
-  setTimeout(()=>$("copyMsg").textContent="",2000);
-});
+$("saveBtn").addEventListener("click",saveReportPDF);
 // Ctrl/Cmd+Enter to analyze
 $("seqin").addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="Enter")analyze();});
 </script>
