@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1b2a">
+<meta name="description" content="ProtParam-compatible protein sequence analyzer that runs entirely in your browser.">
+<title>Protein Sequence Analyzer</title>
+<style>
+  :root{
+    --bg:#0d1b2a; --panel:#16263b; --panel-2:#1d2f47;
+    --line:#2b425f; --text:#eaf1f8; --muted:#9fb3c8; --accent:#4cc9f0;
+    --accent-2:#80ffdb; --pos:#ffb703; --neg:#ef476f; --good:#06d6a0; --bad:#ef476f;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:linear-gradient(180deg,#0b1622,#0d1b2a 40%);
+    color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; min-height:100vh; padding:env(safe-area-inset-top) 0 40px;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:20px 16px}
+  header{margin-bottom:18px}
+  h1{font-size:1.5rem;margin:0 0 4px;letter-spacing:.2px}
+  h1 .dot{color:var(--accent)}
+  .sub{color:var(--muted);font-size:.9rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+  label.field-label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:8px}
+  textarea{
+    width:100%;min-height:140px;resize:vertical;border-radius:10px;border:1px solid var(--line);
+    background:#0f1f31;color:var(--text);padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.86rem;letter-spacing:.5px;
+  }
+  textarea:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  button{
+    border:none;border-radius:10px;padding:11px 18px;font-size:.92rem;font-weight:600;cursor:pointer;
+    transition:transform .05s ease, filter .15s ease;
+  }
+  button:active{transform:translateY(1px)}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#062033}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .btn-ghost:hover{color:var(--text)}
+  select{
+    background:#0f1f31;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:.9rem;
+  }
+  .hidden{display:none}
+  .warn{background:rgba(239,71,111,.12);border:1px solid rgba(239,71,111,.4);color:#ffd2dd;
+    padding:10px 12px;border-radius:10px;font-size:.85rem;margin-top:12px}
+  .seq-meta{color:var(--muted);font-size:.85rem;margin:2px 0 0}
+  /* metric grid */
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .metric{background:#0f1f31;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .metric .k{color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.6px}
+  .metric .v{font-size:1.35rem;font-weight:700;margin-top:4px}
+  .metric .u{color:var(--muted);font-size:.8rem;font-weight:500}
+  .pill{display:inline-block;font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:999px;margin-top:6px}
+  .pill.good{background:rgba(6,214,160,.15);color:var(--good)}
+  .pill.bad{background:rgba(239,71,111,.15);color:var(--bad)}
+  h2{font-size:1.05rem;margin:0 0 12px}
+  /* composition */
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.5px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .bar{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent-2));min-width:2px}
+  .bar-cell{width:30%}
+  /* charge */
+  .charge-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .charge-val{font-size:1.3rem;font-weight:700}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  svg{width:100%;height:auto;display:block;margin-top:8px}
+  footer{color:var(--muted);font-size:.78rem;text-align:center;margin-top:8px}
+  footer a{color:var(--accent)}
+  @media (max-width:480px){
+    h1{font-size:1.3rem}.metric .v{font-size:1.2rem}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Protein Sequence Analyzer<span class="dot">.</span></h1>
+    <div class="sub">ProtParam-compatible physicochemical analysis &middot; runs entirely in your browser &middot; works offline</div>
+  </header>
+
+  <div class="card">
+    <label class="field-label" for="seqin">Paste an amino-acid sequence — raw, wrapped, or FASTA (single or multiple records)</label>
+    <textarea id="seqin" spellcheck="false" placeholder="&gt;my_protein
+MPTSILLIITTMIMASF...
+or just paste the residues, line breaks and numbers are fine"></textarea>
+    <div class="row">
+      <button class="btn-primary" id="analyze">Analyze</button>
+      <button class="btn-ghost" id="example">Load example (PIV3 F)</button>
+      <button class="btn-ghost" id="clear">Clear</button>
+    </div>
+    <div id="parsewarn" class="warn hidden"></div>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="card">
+      <div class="row" style="margin-top:0;justify-content:space-between">
+        <div>
+          <h2 style="margin:0" id="seqTitle">Results</h2>
+          <p class="seq-meta" id="seqMeta"></p>
+        </div>
+        <select id="recordSelect" class="hidden"></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="metrics" id="metrics"></div>
+    </div>
+
+    <div class="card">
+      <div class="charge-head">
+        <h2 style="margin:0">Net charge vs pH</h2>
+        <div>at pH <span id="phLabel">7.0</span> &rarr; <span class="charge-val" id="chargeVal">0</span></div>
+      </div>
+      <input type="range" id="phSlider" min="0" max="14" step="0.1" value="7">
+      <svg id="chargePlot" viewBox="0 0 600 220" preserveAspectRatio="none" aria-label="Charge versus pH curve"></svg>
+    </div>
+
+    <div class="card">
+      <h2>Amino acid composition</h2>
+      <table>
+        <thead><tr><th>AA</th><th>Residue</th><th class="num">Count</th><th class="num">%</th><th class="bar-cell">&nbsp;</th></tr></thead>
+        <tbody id="compBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-top:0">
+        <button class="btn-ghost" id="copyBtn">Copy report</button>
+        <span class="seq-meta" id="copyMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Calculations match Expasy ProtParam (Bjellqvist pK, Guruprasad instability, Kyte–Doolittle hydropathy).
+    No data leaves your device.
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   Calculation engine — verified identical to Expasy ProtParam
+   ============================================================ */
+const DIWV = {"A":{"A":1.0,"C":44.94,"E":1.0,"D":-7.49,"G":1.0,"F":1.0,"I":1.0,"H":-7.49,"K":1.0,"M":1.0,"L":1.0,"N":1.0,"Q":1.0,"P":20.26,"S":1.0,"R":1.0,"T":1.0,"W":1.0,"V":1.0,"Y":1.0},"C":{"A":1.0,"C":1.0,"E":1.0,"D":20.26,"G":1.0,"F":1.0,"I":1.0,"H":33.6,"K":1.0,"M":33.6,"L":20.26,"N":1.0,"Q":-6.54,"P":20.26,"S":1.0,"R":1.0,"T":33.6,"W":24.68,"V":-6.54,"Y":1.0},"E":{"A":1.0,"C":44.94,"E":33.6,"D":20.26,"G":1.0,"F":1.0,"I":20.26,"H":-6.54,"K":1.0,"M":1.0,"L":1.0,"N":1.0,"Q":20.26,"P":20.26,"S":20.26,"R":1.0,"T":1.0,"W":-14.03,"V":1.0,"Y":1.0},"D":{"A":1.0,"C":1.0,"E":1.0,"D":1.0,"G":1.0,"F":-6.54,"I":1.0,"H":1.0,"K":-7.49,"M":1.0,"L":1.0,"N":1.0,"Q":1.0,"P":1.0,"S":20.26,"R":-6.54,"T":-14.03,"W":1.0,"V":1.0,"Y":1.0},"G":{"A":-7.49,"C":1.0,"E":-6.54,"D":1.0,"G":13.34,"F":1.0,"I":-7.49,"H":1.0,"K":-7.49,"M":1.0,"L":1.0,"N":-7.49,"Q":1.0,"P":1.0,"S":1.0,"R":1.0,"T":-7.49,"W":13.34,"V":1.0,"Y":-7.49},"F":{"A":1.0,"C":1.0,"E":1.0,"D":13.34,"G":1.0,"F":1.0,"I":1.0,"H":1.0,"K":-14.03,"M":1.0,"L":1.0,"N":1.0,"Q":1.0,"P":20.26,"S":1.0,"R":1.0,"T":1.0,"W":1.0,"V":1.0,"Y":33.601},"I":{"A":1.0,"C":1.0,"E":44.94,"D":1.0,"G":1.0,"F":1.0,"I":1.0,"H":13.34,"K":-7.49,"M":1.0,"L":20.26,"N":1.0,"Q":1.0,"P":-1.88,"S":1.0,"R":1.0,"T":1.0,"W":1.0,"V":-7.49,"Y":1.0},"H":{"A":1.0,"C":1.0,"E":1.0,"D":1.0,"G":-9.37,"F":-9.37,"I":44.94,"H":1.0,"K":24.68,"M":1.0,"L":1.0,"N":24.68,"Q":1.0,"P":-1.88,"S":1.0,"R":1.0,"T":-6.54,"W":-1.88,"V":1.0,"Y":44.94},"K":{"A":1.0,"C":1.0,"E":1.0,"D":1.0,"G":-7.49,"F":1.0,"I":-7.49,"H":1.0,"K":1.0,"M":33.6,"L":-7.49,"N":1.0,"Q":24.64,"P":-6.54,"S":1.0,"R":33.6,"T":1.0,"W":1.0,"V":-7.49,"Y":1.0},"M":{"A":13.34,"C":1.0,"E":1.0,"D":1.0,"G":1.0,"F":1.0,"I":1.0,"H":58.28,"K":1.0,"M":-1.88,"L":1.0,"N":1.0,"Q":-6.54,"P":44.94,"S":44.94,"R":-6.54,"T":-1.88,"W":1.0,"V":1.0,"Y":24.68},"L":{"A":1.0,"C":1.0,"E":1.0,"D":1.0,"G":1.0,"F":1.0,"I":1.0,"H":1.0,"K":-7.49,"M":1.0,"L":1.0,"N":1.0,"Q":33.6,"P":20.26,"S":1.0,"R":20.26,"T":1.0,"W":24.68,"V":1.0,"Y":1.0},"N":{"A":1.0,"C":-1.88,"E":1.0,"D":1.0,"G":-14.03,"F":-14.03,"I":44.94,"H":1.0,"K":24.68,"M":1.0,"L":1.0,"N":1.0,"Q":-6.54,"P":-1.88,"S":1.0,"R":1.0,"T":-7.49,"W":-9.37,"V":1.0,"Y":1.0},"Q":{"A":1.0,"C":-6.54,"E":20.26,"D":20.26,"G":1.0,"F":-6.54,"I":1.0,"H":1.0,"K":1.0,"M":1.0,"L":1.0,"N":1.0,"Q":20.26,"P":20.26,"S":44.94,"R":1.0,"T":1.0,"W":1.0,"V":-6.54,"Y":-6.54},"P":{"A":20.26,"C":-6.54,"E":18.38,"D":-6.54,"G":1.0,"F":20.26,"I":1.0,"H":1.0,"K":1.0,"M":-6.54,"L":1.0,"N":1.0,"Q":20.26,"P":20.26,"S":20.26,"R":-6.54,"T":1.0,"W":-1.88,"V":20.26,"Y":1.0},"S":{"A":1.0,"C":33.6,"E":20.26,"D":1.0,"G":1.0,"F":1.0,"I":1.0,"H":1.0,"K":1.0,"M":1.0,"L":1.0,"N":1.0,"Q":20.26,"P":44.94,"S":20.26,"R":20.26,"T":1.0,"W":1.0,"V":1.0,"Y":1.0},"R":{"A":1.0,"C":1.0,"E":1.0,"D":1.0,"G":-7.49,"F":1.0,"I":1.0,"H":20.26,"K":1.0,"M":1.0,"L":1.0,"N":13.34,"Q":20.26,"P":20.26,"S":44.94,"R":58.28,"T":1.0,"W":58.28,"V":1.0,"Y":-6.54},"T":{"A":1.0,"C":1.0,"E":20.26,"D":1.0,"G":-7.49,"F":13.34,"I":1.0,"H":1.0,"K":1.0,"M":1.0,"L":1.0,"N":-14.03,"Q":-6.54,"P":1.0,"S":1.0,"R":1.0,"T":1.0,"W":-14.03,"V":1.0,"Y":1.0},"W":{"A":-14.03,"C":1.0,"E":1.0,"D":1.0,"G":-9.37,"F":1.0,"I":1.0,"H":24.68,"K":1.0,"M":24.68,"L":13.34,"N":13.34,"Q":1.0,"P":1.0,"S":1.0,"R":1.0,"T":-14.03,"W":1.0,"V":-7.49,"Y":1.0},"V":{"A":1.0,"C":1.0,"E":1.0,"D":-14.03,"G":-7.49,"F":1.0,"I":1.0,"H":1.0,"K":-1.88,"M":1.0,"L":1.0,"N":1.0,"Q":1.0,"P":20.26,"S":1.0,"R":1.0,"T":-7.49,"W":1.0,"V":1.0,"Y":-6.54},"Y":{"A":24.68,"C":1.0,"E":-6.54,"D":24.68,"G":-7.49,"F":1.0,"I":1.0,"H":13.34,"K":1.0,"M":44.94,"L":1.0,"N":1.0,"Q":1.0,"P":13.34,"S":1.0,"R":-15.91,"T":-7.49,"W":-9.37,"V":1.0,"Y":13.34}};
+const KD = {A:1.8,R:-4.5,N:-3.5,D:-3.5,C:2.5,Q:-3.5,E:-3.5,G:-0.4,H:-3.2,I:4.5,L:3.8,K:-3.9,M:1.9,F:2.8,P:-1.6,S:-0.8,T:-0.7,W:-0.9,Y:-1.3,V:4.2};
+const AVG_MASS = {A:71.0788,R:156.1875,N:114.1038,D:115.0886,C:103.1388,E:129.1155,Q:128.1307,G:57.0519,H:137.1411,I:113.1594,L:113.1594,K:128.1741,M:131.1926,F:147.1766,P:97.1167,S:87.0782,T:101.1051,W:186.2132,Y:163.1760,V:99.1326};
+const WATER = 18.01524;
+const POS_PK = {Nterm:7.5, K:10.0, R:12.0, H:5.98};
+const NEG_PK = {Cterm:3.55, D:4.05, E:4.45, C:9.0, Y:10.0};
+const PK_NTERM = {A:7.59,M:7.0,S:6.93,P:8.36,T:6.82,V:7.44,E:7.7};
+const PK_CTERM = {D:4.55,E:4.75};
+const STD = "ACDEFGHIKLMNPQRSTVWY";
+const NAMES = {A:"Alanine",R:"Arginine",N:"Asparagine",D:"Aspartate",C:"Cysteine",Q:"Glutamine",E:"Glutamate",G:"Glycine",H:"Histidine",I:"Isoleucine",L:"Leucine",K:"Lysine",M:"Methionine",F:"Phenylalanine",P:"Proline",S:"Serine",T:"Threonine",W:"Tryptophan",Y:"Tyrosine",V:"Valine"};
+
+function counts(seq){const c={};for(const a of STD)c[a]=0;for(const ch of seq)if(c[ch]!==undefined)c[ch]++;return c;}
+function molecularWeight(seq){let w=WATER;for(const ch of seq)w+=AVG_MASS[ch]||0;return w;}
+function gravy(seq){let s=0;for(const ch of seq)s+=KD[ch]||0;return s/seq.length;}
+function instability(seq){let s=0;for(let i=0;i<seq.length-1;i++){const r=DIWV[seq[i]];if(r&&r[seq[i+1]]!==undefined)s+=r[seq[i+1]];}return (10/seq.length)*s;}
+function aliphatic(seq){const n=seq.length,c=counts(seq);return (c.A/n*100)+2.9*(c.V/n*100)+3.9*((c.I/n*100)+(c.L/n*100));}
+function chargeAtPH(seq,pH){
+  const c=counts(seq), nt=seq[0], ct=seq[seq.length-1];
+  const pos={...POS_PK}; if(PK_NTERM[nt]!==undefined)pos.Nterm=PK_NTERM[nt];
+  const neg={...NEG_PK}; if(PK_CTERM[ct]!==undefined)neg.Cterm=PK_CTERM[ct];
+  const pc={Nterm:1,K:c.K,R:c.R,H:c.H}, nc={Cterm:1,D:c.D,E:c.E,C:c.C,Y:c.Y};
+  let p=0; for(const k in pos)p+=pc[k]*(1/(Math.pow(10,pH-pos[k])+1));
+  let n=0; for(const k in neg)n+=nc[k]*(1/(Math.pow(10,neg[k]-pH)+1));
+  return p-n;
+}
+function isoelectricPoint(seq){let lo=0,hi=14;for(let i=0;i<100;i++){const m=(lo+hi)/2;if(chargeAtPH(seq,m)>0)lo=m;else hi=m;}return (lo+hi)/2;}
+function extinction(seq){const c=counts(seq);const red=c.Y*1490+c.W*5500;return {reduced:red,cystine:red+Math.floor(c.C/2)*125};}
+
+function analyzeSeq(seq){
+  const c=counts(seq), n=seq.length;
+  const ii=instability(seq), ext=extinction(seq);
+  return {
+    length:n, counts:c, mw:molecularWeight(seq), pI:isoelectricPoint(seq),
+    gravy:gravy(seq), instability:ii, stable:ii<=40, aliphatic:aliphatic(seq),
+    neg:c.D+c.E, pos:c.R+c.K, ext, charge7:chargeAtPH(seq,7),
+    mwKDa:molecularWeight(seq)/1000
+  };
+}
+
+/* ---- input parsing (the wrapped-sequence fix, in JS) ---- */
+function parseInput(text){
+  const lines=text.split(/\r?\n/);
+  const hasHeader=lines.some(l=>l.trimStart().startsWith(">"));
+  const records=[];
+  const clean=s=>s.toUpperCase().replace(/[^A-Z]/g,"");
+  if(hasHeader){
+    let cur=null;
+    for(const line of lines){
+      const t=line.trim();
+      if(t.startsWith(">")){
+        if(cur)records.push(cur);
+        const h=t.slice(1).trim();
+        cur={id:(h.split(/\s+/)[0]||"seq"), desc:h, raw:""};
+      } else if(cur && t && !t.startsWith("#")){
+        cur.raw+=t;
+      }
+    }
+    if(cur)records.push(cur);
+  } else {
+    const raw=lines.filter(l=>l.trim()&&!l.trim().startsWith("#")).join("");
+    if(raw.trim())records.push({id:"sequence", desc:"Pasted sequence", raw});
+  }
+  // finalize: split standard vs non-standard residues
+  return records.map(r=>{
+    const all=clean(r.raw);
+    const seq=[...all].filter(ch=>STD.includes(ch)).join("");
+    const nonStd=[...all].filter(ch=>!STD.includes(ch));
+    return {id:r.id, desc:r.desc, seq, nonStd};
+  }).filter(r=>r.seq.length>0);
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $=id=>document.getElementById(id);
+const EXAMPLE=`>PIV3_wt Parainfluenza virus 3 fusion (F) protein
+MPTSILLIIT TMIMASFCQI DITKLQHVGV LVNSPKGMKI SQNFETRYLI LSLIPKIEDS
+NSCGDQQIKQ YKRLLDRLII PLYDGLRLQK DVIVSNQESN ENTDPRTKRF FGGVIGTIAL
+GVATSAQITA AVALVEAKQA RSDIEKLKEA IRDTNKAVQS VQSSIGNLIV AIKSVQDYVN
+KEIVPSIARL GCEAAGLQLG IALTQHYSEL TNIFGDNIGS LQEKGIKLQG IASLYRTNIT
+EIFTTSTVDK YDIYDLLFTE SIKVRVIDVD LNDYSITLQV RLPLLTRLLN TQIYRVDSIS
+YNIQNREWYI PLPSHIMTKG AFLGGADVKE CIEAFSSYIC PSDPGFVLNH EMESCLSGNI
+SQCPRTVVKS DIVPRYAFVN GGVVANCITT TCTCNGIGNR INQPPDQGVK IITHKECNTI
+GINGMLFNTN KEGTLAFYTP NDITLNNSVA LDPIDISIEL NKAKSDLEES KEWIRRSNQK
+LDSIGNWHQS STTIIIVLIM IIILFIINVT IIIIAVKYYR IQKRNRVDQN DKPYVLTNK`;
+
+let RECORDS=[], CURRENT=null;
+
+function fmt(x,d=2){return x.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});}
+
+function renderMetrics(a){
+  const stablePill=a.stable
+    ? `<span class="pill good">stable</span>`
+    : `<span class="pill bad">unstable</span>`;
+  const m=[
+    {k:"Length",v:a.length,u:"residues"},
+    {k:"Molecular weight",v:fmt(a.mw),u:"Da &middot; "+fmt(a.mwKDa,2)+" kDa"},
+    {k:"Theoretical pI",v:fmt(a.pI),u:""},
+    {k:"Instability index",v:fmt(a.instability),u:stablePill},
+    {k:"Aliphatic index",v:fmt(a.aliphatic),u:""},
+    {k:"GRAVY",v:fmt(a.gravy,3),u:"hydropathy"},
+    {k:"Charge at pH 7",v:(a.charge7>=0?"+":"")+fmt(a.charge7),u:""},
+    {k:"&minus; / + residues",v:a.neg+" / "+a.pos,u:"Asp+Glu / Arg+Lys"},
+    {k:"Ext. coeff (reduced)",v:fmt(a.ext.reduced,0),u:"M⁻¹cm⁻¹"},
+    {k:"Ext. coeff (cystines)",v:fmt(a.ext.cystine,0),u:"M⁻¹cm⁻¹"},
+  ];
+  $("metrics").innerHTML=m.map(x=>
+    `<div class="metric"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="u">${x.u}</div></div>`
+  ).join("");
+}
+
+function renderComposition(a){
+  const rows=STD.split("").map(aa=>({aa,n:a.counts[aa],pct:a.counts[aa]/a.length*100}))
+    .sort((x,y)=>y.n-x.n);
+  const max=Math.max(...rows.map(r=>r.pct),0.0001);
+  $("compBody").innerHTML=rows.map(r=>
+    `<tr><td><strong>${r.aa}</strong></td><td>${NAMES[r.aa]}</td>
+     <td class="num">${r.n}</td><td class="num">${fmt(r.pct)}</td>
+     <td class="bar-cell"><div class="bar" style="width:${(r.pct/max*100).toFixed(1)}%"></div></td></tr>`
+  ).join("");
+}
+
+function renderChargePlot(seq){
+  const W=600,H=220,padL=38,padB=26,padT=10,padR=8;
+  const xs=[],ys=[];
+  for(let pH=0;pH<=14;pH+=0.1){xs.push(pH);ys.push(chargeAtPH(seq,pH));}
+  const maxY=Math.max(...ys.map(Math.abs),1);
+  const X=pH=>padL+(pH/14)*(W-padL-padR);
+  const Y=q=>padT+(1-(q+maxY)/(2*maxY))*(H-padT-padB);
+  const path=xs.map((pH,i)=>(i?"L":"M")+X(pH).toFixed(1)+","+Y(ys[i]).toFixed(1)).join(" ");
+  const pI=isoelectricPoint(seq);
+  const zeroY=Y(0);
+  let g="";
+  for(let pH=0;pH<=14;pH+=2){g+=`<line x1="${X(pH)}" y1="${padT}" x2="${X(pH)}" y2="${H-padB}" stroke="#27405d" stroke-width="1"/><text x="${X(pH)}" y="${H-padB+16}" fill="#9fb3c8" font-size="11" text-anchor="middle">${pH}</text>`;}
+  $("chargePlot").innerHTML=`
+    ${g}
+    <line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="#3a567a" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <text x="6" y="${zeroY+4}" fill="#9fb3c8" font-size="11">0</text>
+    <line id="phMark" x1="${X(7)}" y1="${padT}" x2="${X(7)}" y2="${H-padB}" stroke="#4cc9f0" stroke-width="1.5"/>
+    <line x1="${X(pI)}" y1="${padT}" x2="${X(pI)}" y2="${H-padB}" stroke="#80ffdb" stroke-width="1.5" stroke-dasharray="2 3"/>
+    <text x="${X(pI)+4}" y="${padT+14}" fill="#80ffdb" font-size="11">pI ${pI.toFixed(2)}</text>
+    <path d="${path}" fill="none" stroke="#ef476f" stroke-width="2.5"/>
+    <circle id="phDot" cx="${X(7)}" cy="${Y(chargeAtPH(seq,7))}" r="4" fill="#4cc9f0"/>`;
+  // store scales for slider updates
+  $("chargePlot").dataset.scale=JSON.stringify({padL,padR,padT,padB,W,H,maxY});
+}
+
+function updateCharge(pH){
+  const seq=CURRENT.seq;
+  const q=chargeAtPH(seq,pH);
+  $("phLabel").textContent=pH.toFixed(1);
+  $("chargeVal").textContent=(q>=0?"+":"")+q.toFixed(2);
+  $("chargeVal").style.color=q>0?"var(--pos)":q<0?"var(--neg)":"var(--muted)";
+  const s=JSON.parse($("chargePlot").dataset.scale);
+  const X=p=>s.padL+(p/14)*(s.W-s.padL-s.padR);
+  const Y=v=>s.padT+(1-(v+s.maxY)/(2*s.maxY))*(s.H-s.padT-s.padB);
+  const mark=$("phMark"), dot=$("phDot");
+  if(mark){mark.setAttribute("x1",X(pH));mark.setAttribute("x2",X(pH));}
+  if(dot){dot.setAttribute("cx",X(pH));dot.setAttribute("cy",Y(q));}
+}
+
+function showRecord(idx){
+  CURRENT=RECORDS[idx];
+  const a=analyzeSeq(CURRENT.seq);
+  CURRENT.analysis=a;
+  $("seqTitle").textContent=CURRENT.id;
+  let meta=`${CURRENT.desc} &middot; ${a.length} residues`;
+  if(CURRENT.nonStd.length)meta+=` &middot; ${CURRENT.nonStd.length} non-standard residue(s) ignored`;
+  $("seqMeta").innerHTML=meta;
+  renderMetrics(a);
+  renderComposition(a);
+  renderChargePlot(CURRENT.seq);
+  $("phSlider").value=7;
+  updateCharge(7);
+}
+
+function analyze(){
+  const text=$("seqin").value;
+  const warnEl=$("parsewarn");
+  RECORDS=parseInput(text);
+  if(RECORDS.length===0){
+    warnEl.textContent="No valid amino-acid residues found. Paste a protein sequence (FASTA or raw).";
+    warnEl.classList.remove("hidden");
+    $("results").classList.add("hidden");
+    return;
+  }
+  warnEl.classList.add("hidden");
+  const sel=$("recordSelect");
+  if(RECORDS.length>1){
+    sel.innerHTML=RECORDS.map((r,i)=>`<option value="${i}">${i+1}. ${r.id} (${r.seq.length} aa)</option>`).join("");
+    sel.classList.remove("hidden");
+  } else {
+    sel.classList.add("hidden");
+  }
+  $("results").classList.remove("hidden");
+  showRecord(0);
+  $("results").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function buildReport(){
+  const r=CURRENT, a=r.analysis;
+  const comp=STD.split("").map(aa=>`  ${aa} ${NAMES[aa].padEnd(13)} ${String(a.counts[aa]).padStart(4)}  ${fmt(a.counts[aa]/a.length*100)}%`).join("\n");
+  return `Protein Sequence Analysis — ${r.id}
+${r.desc}
+========================================
+Number of residues : ${a.length}
+Molecular weight   : ${fmt(a.mw)} Da (${fmt(a.mwKDa,2)} kDa)
+Theoretical pI     : ${fmt(a.pI)}
+Instability index  : ${fmt(a.instability)} (${a.stable?"stable":"unstable"})
+Aliphatic index    : ${fmt(a.aliphatic)}
+GRAVY              : ${fmt(a.gravy,3)}
+Net charge at pH 7 : ${(a.charge7>=0?"+":"")+fmt(a.charge7)}
+Negative (D+E)     : ${a.neg}
+Positive (R+K)     : ${a.pos}
+Ext. coeff (red.)  : ${fmt(a.ext.reduced,0)} M-1 cm-1
+Ext. coeff (cyst.) : ${fmt(a.ext.cystine,0)} M-1 cm-1
+
+Amino acid composition:
+${comp}
+`;
+}
+
+/* events */
+$("analyze").addEventListener("click",analyze);
+$("example").addEventListener("click",()=>{$("seqin").value=EXAMPLE;analyze();});
+$("clear").addEventListener("click",()=>{$("seqin").value="";$("results").classList.add("hidden");$("parsewarn").classList.add("hidden");$("seqin").focus();});
+$("recordSelect").addEventListener("change",e=>showRecord(+e.target.value));
+$("phSlider").addEventListener("input",e=>updateCharge(+e.target.value));
+$("copyBtn").addEventListener("click",async()=>{
+  try{await navigator.clipboard.writeText(buildReport());$("copyMsg").textContent="Copied!";}
+  catch{$("copyMsg").textContent="Copy failed — select and copy manually.";}
+  setTimeout(()=>$("copyMsg").textContent="",2000);
+});
+// Ctrl/Cmd+Enter to analyze
+$("seqin").addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="Enter")analyze();});
+</script>
+</body>
+</html>
