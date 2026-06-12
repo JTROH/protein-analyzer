@@ -76,20 +76,21 @@
   @media (max-width:480px){
     h1{font-size:1.3rem}.metric .v{font-size:1.2rem}
   }
-  /* print-only report (used for Save as PDF) */
-  #printReport{display:none}
+  /* Save as PDF: print the dark results panels exactly as shown on screen */
   @media print{
-    @page{margin:16mm}
-    body{background:#fff;color:#000}
-    .wrap{display:none !important}
-    #printReport{display:block !important;color:#000;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-    #printReport h1{font-size:18px;margin:0 0 2px}
-    #printReport .muted{color:#444;font-size:11px;margin:1px 0}
-    #printReport h2{font-size:13px;margin:16px 0 4px;border-bottom:1px solid #000;padding-bottom:3px}
-    #printReport table{width:100%;border-collapse:collapse;margin-top:6px;font-size:11px}
-    #printReport th,#printReport td{border:1px solid #999;padding:4px 7px;text-align:left}
-    #printReport th.num,#printReport td.num{text-align:right;font-variant-numeric:tabular-nums}
-    #printReport pre{font-size:10px;white-space:pre-wrap;word-break:break-all;font-family:ui-monospace,Menlo,Consolas,monospace;margin:4px 0 0}
+    @page{margin:10mm}
+    html,body{background:#0d1b2a !important;padding:0}
+    /* force background/colors to render in the PDF */
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+    header,.no-print{display:none !important}
+    .wrap{max-width:100%;margin:0;padding:0}
+    #results,#results.hidden{display:block !important}
+    .card{break-inside:avoid;margin-bottom:12px}
+    .metric{break-inside:avoid}
+    .metrics{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+    svg,.charge-head{break-inside:avoid}
+    /* the native range control prints poorly; the chart already marks pH */
+    input[type=range]{display:none}
   }
 </style>
 </head>
@@ -100,7 +101,7 @@
     <div class="sub">ProtParam-compatible physicochemical analysis &middot; runs entirely in your browser &middot; works offline</div>
   </header>
 
-  <div class="card">
+  <div class="card no-print">
     <label class="field-label" for="seqin">Paste an amino-acid sequence — raw, wrapped, or FASTA (single or multiple records)</label>
     <textarea id="seqin" spellcheck="false" placeholder="&gt;my_protein
 MPTSILLIITTMIMASF...
@@ -145,7 +146,7 @@ or just paste the residues, line breaks and numbers are fine"></textarea>
       </table>
     </div>
 
-    <div class="card">
+    <div class="card no-print">
       <div class="row" style="margin-top:0">
         <button class="btn-primary" id="saveBtn">Save report (PDF)</button>
         <span class="seq-meta" id="saveMsg"></span>
@@ -153,14 +154,11 @@ or just paste the residues, line breaks and numbers are fine"></textarea>
     </div>
   </div>
 
-  <footer>
+  <footer class="no-print">
     Calculations match Expasy ProtParam (Bjellqvist pK, Guruprasad instability, Kyte–Doolittle hydropathy).
     No data leaves your device.
   </footer>
 </div>
-
-<!-- Hidden on screen; rendered only when printing / saving as PDF -->
-<div id="printReport" aria-hidden="true"></div>
 
 <script>
 /* ============================================================
@@ -365,44 +363,8 @@ function analyze(){
   $("results").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
-function esc(s){return String(s).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));}
-
-function buildPrintReport(){
-  const r=CURRENT, a=r.analysis;
-  const props=[
-    ["Number of residues", a.length],
-    ["Molecular weight", `${fmt(a.mw)} Da (${fmt(a.mwKDa,2)} kDa)`],
-    ["Theoretical pI", fmt(a.pI)],
-    ["Instability index", `${fmt(a.instability)} (${a.stable?"stable":"unstable"})`],
-    ["Aliphatic index", fmt(a.aliphatic)],
-    ["GRAVY (hydropathy)", fmt(a.gravy,3)],
-    ["Net charge at pH 7", (a.charge7>=0?"+":"")+fmt(a.charge7)],
-    ["Negatively charged (Asp+Glu)", a.neg],
-    ["Positively charged (Arg+Lys)", a.pos],
-    ["Ext. coefficient (reduced)", `${fmt(a.ext.reduced,0)} M⁻¹cm⁻¹`],
-    ["Ext. coefficient (cystines)", `${fmt(a.ext.cystine,0)} M⁻¹cm⁻¹`],
-  ].map(([k,v])=>`<tr><td>${k}</td><td class="num">${v}</td></tr>`).join("");
-  const comp=STD.split("").map(aa=>({aa,n:a.counts[aa],pct:a.counts[aa]/a.length*100}))
-    .sort((x,y)=>y.n-x.n)
-    .map(x=>`<tr><td>${x.aa} &middot; ${NAMES[x.aa]}</td><td class="num">${x.n}</td><td class="num">${fmt(x.pct)}%</td></tr>`).join("");
-  const seqBlock=esc(r.seq).replace(/(.{60})/g,"$1\n");
-  let note=`Generated ${new Date().toLocaleString()} &middot; jtroh.github.io/protein-analyzer &middot; ProtParam-compatible`;
-  if(r.nonStd.length)note+=` &middot; ${r.nonStd.length} non-standard residue(s) ignored`;
-  $("printReport").innerHTML=`
-    <h1>Protein Sequence Analysis</h1>
-    <div class="muted"><strong>${esc(r.id)}</strong> — ${esc(r.desc)}</div>
-    <div class="muted">${note}</div>
-    <h2>Physicochemical properties</h2>
-    <table><tbody>${props}</tbody></table>
-    <h2>Amino acid composition</h2>
-    <table><thead><tr><th>Residue</th><th class="num">Count</th><th class="num">%</th></tr></thead><tbody>${comp}</tbody></table>
-    <h2>Sequence (${a.length} aa)</h2>
-    <pre>${seqBlock}</pre>`;
-}
-
 function saveReportPDF(){
   if(!CURRENT)return;
-  buildPrintReport();
   const prevTitle=document.title;
   // The print dialog's default "Save as PDF" filename comes from document.title
   document.title=("Protein_report_"+(CURRENT.id||"sequence")).replace(/[^A-Za-z0-9_.-]+/g,"_");
