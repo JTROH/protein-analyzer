@@ -149,6 +149,7 @@ or just paste the residues, line breaks and numbers are fine"></textarea>
     <div class="card no-print">
       <div class="row" style="margin-top:0">
         <button class="btn-primary" id="saveBtn">Save report (PDF)</button>
+        <button class="btn-ghost" id="csvBtn">Export CSV</button>
         <span class="seq-meta" id="saveMsg"></span>
       </div>
     </div>
@@ -374,6 +375,59 @@ function saveReportPDF(){
   window.print();
 }
 
+function fileBase(){
+  return ("Protein_report_"+(CURRENT.id||"sequence")).replace(/[^A-Za-z0-9_.-]+/g,"_");
+}
+
+function toCSV(rows){
+  return rows.map(r=>r.map(f=>{
+    const s=(f===undefined||f===null)?"":String(f);
+    return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(",")).join("\r\n");
+}
+
+function exportCSV(){
+  if(!CURRENT)return;
+  const r=CURRENT, a=r.analysis;
+  const rows=[
+    ["Protein Sequence Analysis"],
+    ["ID", r.id],
+    ["Description", r.desc],
+    ["Generated", new Date().toLocaleString()],
+    ["Source", "jtroh.github.io/protein-analyzer (ProtParam-compatible)"],
+  ];
+  if(r.nonStd.length) rows.push(["Non-standard residues ignored", r.nonStd.length]);
+  rows.push([], ["Property","Value","Unit"],
+    ["Length", a.length, "residues"],
+    ["Molecular weight", a.mw.toFixed(2), "Da"],
+    ["Molecular weight", a.mwKDa.toFixed(2), "kDa"],
+    ["Theoretical pI", a.pI.toFixed(2), ""],
+    ["Instability index", a.instability.toFixed(2), a.stable?"stable":"unstable"],
+    ["Aliphatic index", a.aliphatic.toFixed(2), ""],
+    ["GRAVY", a.gravy.toFixed(3), ""],
+    ["Net charge at pH 7", a.charge7.toFixed(2), ""],
+    ["Negatively charged (Asp+Glu)", a.neg, ""],
+    ["Positively charged (Arg+Lys)", a.pos, ""],
+    ["Extinction coefficient (reduced)", a.ext.reduced, "M-1 cm-1"],
+    ["Extinction coefficient (cystines)", a.ext.cystine, "M-1 cm-1"],
+    [], ["Amino acid","Name","Count","Percent"]
+  );
+  STD.split("").map(aa=>({aa,n:a.counts[aa],pct:a.counts[aa]/a.length*100}))
+    .sort((x,y)=>y.n-x.n)
+    .forEach(x=>rows.push([x.aa, NAMES[x.aa], x.n, x.pct.toFixed(2)]));
+  rows.push([], ["Sequence"], [r.seq]);
+
+  // BOM so Excel reads UTF-8 (µ etc.) correctly
+  const blob=new Blob(["﻿"+toCSV(rows)],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url; link.download=fileBase()+".csv";
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  $("saveMsg").textContent="CSV downloaded.";
+  setTimeout(()=>{ if($("saveMsg").textContent==="CSV downloaded.") $("saveMsg").textContent=""; },2500);
+}
+
 /* events */
 $("analyze").addEventListener("click",analyze);
 $("example").addEventListener("click",()=>{$("seqin").value=EXAMPLE;analyze();});
@@ -381,6 +435,7 @@ $("clear").addEventListener("click",()=>{$("seqin").value="";$("results").classL
 $("recordSelect").addEventListener("change",e=>showRecord(+e.target.value));
 $("phSlider").addEventListener("input",e=>updateCharge(+e.target.value));
 $("saveBtn").addEventListener("click",saveReportPDF);
+$("csvBtn").addEventListener("click",exportCSV);
 // Ctrl/Cmd+Enter to analyze
 $("seqin").addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="Enter")analyze();});
 </script>
