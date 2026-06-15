@@ -76,6 +76,9 @@
   @media (max-width:480px){
     h1{font-size:1.3rem}.metric .v{font-size:1.2rem}
   }
+  /* numbered sequence block */
+  .numseq{margin:0;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.8rem;line-height:1.5;color:var(--text);white-space:pre;-webkit-overflow-scrolling:touch}
   /* Save as PDF: print the dark results panels exactly as shown on screen */
   @media print{
     @page{margin:10mm}
@@ -86,7 +89,9 @@
     .wrap{max-width:100%;margin:0;padding:0}
     #results,#results.hidden{display:block !important}
     .card{break-inside:avoid;margin-bottom:12px}
+    .card.allow-break{break-inside:auto}
     .metric{break-inside:avoid}
+    .numseq{font-size:9px;line-height:1.45;color:#eaf1f8;overflow:visible;white-space:pre}
     .metrics{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
     svg,.charge-head{break-inside:avoid}
     /* the native range control prints poorly; the chart already marks pH */
@@ -144,6 +149,11 @@ or just paste the residues, line breaks and numbers are fine"></textarea>
         <thead><tr><th>AA</th><th>Residue</th><th class="num">Count</th><th class="num">%</th><th class="bar-cell">&nbsp;</th></tr></thead>
         <tbody id="compBody"></tbody>
       </table>
+    </div>
+
+    <div class="card allow-break">
+      <h2>Numbered sequence <span class="seq-meta">(50 per line, blocks of 10)</span></h2>
+      <pre id="numseq" class="numseq"></pre>
     </div>
 
     <div class="card no-print">
@@ -326,6 +336,23 @@ function updateCharge(pH){
   if(dot){dot.setAttribute("cx",X(pH));dot.setAttribute("cy",Y(q));}
 }
 
+// ProtParam-style numbered block: 50 residues/line, grouped in 10s,
+// a position number right-aligned above each full block of 10.
+function numberedSequence(seq){
+  const blocks=[];
+  for(let i=0;i<seq.length;i+=10) blocks.push(seq.slice(i,i+10));
+  const lines=[];
+  for(let b=0;b<blocks.length;b+=5){
+    const lineBlocks=blocks.slice(b,b+5);
+    const numRow=lineBlocks.map((blk,j)=>{
+      const lastPos=(b+j)*10+blk.length;                  // position of block's last residue
+      return (blk.length===10 ? String(lastPos) : "").padStart(10);
+    }).join(" ").replace(/\s+$/,"");
+    lines.push(numRow+"\n"+lineBlocks.join(" "));
+  }
+  return lines.join("\n\n");
+}
+
 function showRecord(idx){
   CURRENT=RECORDS[idx];
   const a=analyzeSeq(CURRENT.seq);
@@ -337,6 +364,7 @@ function showRecord(idx){
   renderMetrics(a);
   renderComposition(a);
   renderChargePlot(CURRENT.seq);
+  $("numseq").textContent=numberedSequence(CURRENT.seq);
   $("phSlider").value=7;
   updateCharge(7);
 }
@@ -416,6 +444,7 @@ function exportCSV(){
     .sort((x,y)=>y.n-x.n)
     .forEach(x=>rows.push([x.aa, NAMES[x.aa], x.n, x.pct.toFixed(2)]));
   rows.push([], ["Sequence"], [r.seq]);
+  rows.push([], ["Numbered sequence (50 per line, blocks of 10)"], [numberedSequence(r.seq)]);
 
   // BOM so Excel reads UTF-8 (µ etc.) correctly
   const blob=new Blob(["﻿"+toCSV(rows)],{type:"text/csv;charset=utf-8"});
